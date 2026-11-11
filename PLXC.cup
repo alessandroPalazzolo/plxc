@@ -1,0 +1,470 @@
+import java_cup.runtime.*;
+import java.util.*;
+
+action code {:
+    class BoolLabelPair {
+        public String isTrue, isFalse;
+
+        public BoolLabelPair(){
+            isTrue = TablaS.newEtiq("T");
+            isFalse = TablaS.newEtiq("F");
+        }
+    }
+
+    class ForLabelPair {
+        public String next, loop;
+
+        public ForLabelPair(){
+            next = TablaS.newEtiq("Next");
+            loop = TablaS.newEtiq("Loop");
+        }
+    }
+
+    class Declaration{
+        private String name;
+        private Objeto init;
+
+        public Declaration(String n, Objeto i){
+            name = n;
+            init = i;
+        }
+
+        public String getName(){
+            return name;
+        }
+
+        public Objeto getInit(){
+            return init;
+        }
+
+        public boolean equals(Declaration d){
+            return name.equals(d.name);
+        }
+    }
+
+    Objeto trueObj = new Instancia("1", Tboolean.getInstancia(), 0, false);
+    Objeto falseObj = new Instancia("0", Tboolean.getInstancia(), 0, false);    
+:}
+
+non terminal line_list, line, line_simp, line_comp, ln_print, ln_if, else_if, ln_while, ln_do_while, ln_for, for_expression;
+non terminal BoolLabelPair condition, controlParam;
+non terminal ForLabelPair label_for;
+non terminal String label_if, label_while, label_forall, forall_step;
+non terminal Set<Declaration> list_declar_var;
+non terminal Objeto expression, initialize, bimplies_temp;
+non terminal Integer IBloque;
+non terminal Tipo tipo;
+
+terminal PCOMA, A_LLAVE, C_LLAVE, COMA, AP, CP; // syntax
+terminal INT, FLOAT, CHAR, BOOLEAN; // types
+terminal ASIGNA, SUMA, SUBSTRACTION, PRODUCT, DIVISION, NEGATION; // math
+terminal EQUALS, N_EQUALS, GREATER, LESS, GREATER_EQ, LESS_EQ, AND, OR, NOT, BIMPLIES; // logic
+terminal PRINT, IF, ELSEIF, ELSE, WHILE, DO, FOR, EXISTS, FROM, TO, STEP; // control
+terminal String ID, ID_BOOL, ENTERO, REAL, CHARACTER, ESCAPEDCHAR, UNICODECHAR, TRUE, FALSE; // lex
+
+precedence left ENTERO, REAL, CHARACTER, ID, ID_BOOL, TRUE, FALSE, COMA;
+precedence left ELSE, ELSEIF;
+precedence right ASIGNA;
+precedence right BIMPLIES;
+precedence left OR;
+precedence left AND;
+precedence left NOT;
+precedence left EQUALS, N_EQUALS, GREATER, LESS, GREATER_EQ, LESS_EQ;
+precedence left SUMA, SUBSTRACTION;
+precedence left DIVISION, PRODUCT;
+precedence left AP, CP;
+precedence left NEGATION; // test NEGATION < AP,CP
+
+line_list ::= line
+                | line_list line
+                ;
+
+line ::= line_simp
+            | line_comp
+            ;
+
+// COMP LINE
+line_comp ::= A_LLAVE IBloque:i line_list C_LLAVE  {:
+                                                        PLXC.tabla.borrarBloque(TablaS.bActual);
+                                                        TablaS.bActual = i.intValue();
+                                                    :}
+                 ;
+
+IBloque ::= {: RESULT = Integer.valueOf(TablaS.newBloque()); :};
+
+// SIMP
+line_simp ::= expression PCOMA
+            | ln_print PCOMA
+            | ln_if 
+            | ln_while
+            | ln_do_while PCOMA
+            | ln_for
+            | PCOMA
+            ;
+
+// SIMP - declarations
+tipo ::= INT {: RESULT = Tint.getInstancia(); :}
+       | FLOAT {: RESULT = Tfloat.getInstancia(); :}
+       | CHAR   {: RESULT = Tchar.getInstancia(); :} 
+       | BOOLEAN    {: RESULT = Tboolean.getInstancia(); :}
+       ;
+
+list_declar_var ::= ID:i initialize:o   {:  
+                                            Set<Declaration> declarations = new HashSet<>();
+                                            declarations.add(new Declaration(i,o));
+                                            RESULT = declarations;
+                                        :}
+                  | list_declar_var:dl COMA ID:i initialize:o   {:  
+                                                                    Declaration newDec = new Declaration(i,o);
+                                                                    if (!dl.add(newDec)){
+                                                                        PLXC.errorYPara("Variable already declared.");
+                                                                    }
+                                                                    RESULT = dl;
+                                                                :}
+                  ;
+
+initialize ::= ASIGNA expression:e1  {: RESULT = e1; :}
+             | ASIGNA condition:c   {: 
+                                        Objeto x = new Instancia("%" + c.isTrue + "-" + c.isFalse, Tboolean.getInstancia(), 0, false);
+                                        RESULT = x;
+                                    :}
+             |  {: RESULT = null; :}
+             ;
+
+// SIMP - print
+ln_print ::= PRINT AP expression:e CP   {: e.metodos("print", null); :}
+           | PRINT AP condition:c CP    {:
+                                            String finalLabel = TablaS.newEtiq("Final");
+                                            PLXC.out.println(c.isTrue + ":");
+                                            TablaS.printTrue();
+                                            PLXC.out.println("goto " + finalLabel + ";");
+                                            PLXC.out.println(c.isFalse + ":");
+                                            TablaS.printFalse();
+                                            PLXC.out.println(finalLabel + ":");
+                                        :};
+
+// SIMP - math
+expression ::= ID:i ASIGNA expression:e {:  
+                                            Objeto receiving = PLXC.tabla.objeto(i);
+                                            Vector<Objeto> p = new Vector<Objeto>(); 
+                                            p.add(e);
+                                            RESULT = receiving.metodos("asigna", p);
+                                        :}
+            | ID_BOOL:i ASIGNA condition:c  {:  
+                                                Objeto receiving = PLXC.tabla.objeto(i);
+                                                String finalLabel = TablaS.newEtiq("Final");
+                                                PLXC.out.println(c.isTrue + ":");
+                                                receiving.metodos("asigna", Objeto.vectorize(trueObj));
+                                                PLXC.out.println("goto " + finalLabel + ";");
+                                                PLXC.out.println(c.isFalse + ":");
+                                                receiving.metodos("asigna", Objeto.vectorize(falseObj));
+                                                PLXC.out.println(finalLabel + ":");
+                                                RESULT = receiving;
+                                            :}
+            | ID_BOOL:i ASIGNA expression:e  {:  
+                                                Objeto receiving = PLXC.tabla.objeto(i);
+                                                Vector<Objeto> p = new Vector<Objeto>(); 
+                                                p.add(e);
+                                                RESULT = receiving.metodos("asigna", p);
+                                            :}
+            | tipo:t list_declar_var:dl  {: 
+                                            dl.forEach(dec -> {
+                                                Objeto newObj = new Instancia(dec.getName(), t, TablaS.bActual, false);
+                                                PLXC.tabla.addObjeto(newObj);
+
+                                                if (!Objects.isNull(dec.getInit())){
+                                                    Vector<Objeto> p = new Vector<Objeto>(); 
+                                                    p.add(dec.getInit());
+                                                    newObj.metodos("asigna", p);
+                                                }
+                                            });
+                                        :} 
+            | expression:e1 SUMA expression:e2  {:  
+                                                    Vector<Objeto> p = new Vector<Objeto>();
+                                                    p.add(e2);
+                                                    RESULT = e1.metodos("suma", p);   
+                                                :}
+            | expression:e1 SUBSTRACTION expression:e2  {:  
+                                                            Vector<Objeto> p = new Vector<Objeto>(); 
+                                                            p.add(e2);
+                                                            RESULT = e1.metodos("substraction", p);   
+                                                        :}
+            | expression:e1 PRODUCT expression:e2   {:
+                                                        Vector<Objeto> p = new Vector<Objeto>(); 
+                                                        p.add(e2);
+                                                        RESULT = e1.metodos("product", p);  
+                                                    :}
+            | expression:e1 DIVISION expression:e2  {:
+                                                        Vector<Objeto> p = new Vector<Objeto>(); 
+                                                        p.add(e2);
+                                                        RESULT = e1.metodos("division", p);  
+                                                    :}
+            | SUBSTRACTION expression:e {: RESULT = e.metodos("negation", null); :} %prec NEGATION
+            | AP INT CP condition:c    {:
+                                            Objeto newObj = new Instancia(TablaS.newObj(), Tint.getInstancia(), TablaS.bActual, false);
+                                            String finalLabel = TablaS.newEtiq("Final"); 
+                                            PLXC.out.println(c.isTrue + ":");
+                                            PLXC.out.println(newObj + " = 1;");
+                                            PLXC.out.println("goto " + finalLabel + ";");    
+                                            PLXC.out.println(c.isFalse + ":");
+                                            PLXC.out.println(newObj + " = 0;");
+                                            PLXC.out.println(finalLabel + ":");
+                                            RESULT = newObj;
+                                        :}
+            | AP expression:e CP {: RESULT = e; :} 
+            | ENTERO:e  {:  
+                            Objeto o = new Instancia(e, Tint.getInstancia(), 0, false);
+                            RESULT = o; 
+                        :}
+            | REAL:r    {:
+                            Objeto o = new Instancia(r, Tfloat.getInstancia(), 0, false);
+                            RESULT = o; 
+                        :}
+            | CHARACTER:c   {:  
+                                String name = TablaS.getAscii(c, "plain");
+                                Objeto o = new Instancia(name, Tchar.getInstancia(), 0, false);
+                                RESULT = o; 
+                            :}
+            | ESCAPEDCHAR:c {:  
+                                String name = TablaS.getAscii(c, "escaped");
+                                Objeto o = new Instancia(name, Tchar.getInstancia(), 0, false);
+                                RESULT = o; 
+                            :}
+            | UNICODECHAR:c {:  
+                                String name = TablaS.getAscii(c, "unicode");
+                                Objeto o = new Instancia(name, Tchar.getInstancia(), 0, false);
+                                RESULT = o; 
+                            :}
+            | ID:i  {: 
+                        Objeto foundObj = PLXC.tabla.objeto(i);
+                        RESULT = foundObj;
+                    :}
+            ;
+
+// SIMP - control
+condition ::= expression:e1 EQUALS expression:e2    {:
+                                                        BoolLabelPair labels = new BoolLabelPair();
+                                                        PLXC.out.println("if (" + e1 + "==" + e2 + ") goto " + labels.isTrue + ";");
+                                                        PLXC.out.println("goto " + labels.isFalse + ";");
+                                                        RESULT = labels;
+                                                    :}
+            | expression:e1 N_EQUALS expression:e2  {:
+                                                        BoolLabelPair labels = new BoolLabelPair();
+                                                        PLXC.out.println("if (" + e1 + "!=" + e2 + ") goto " + labels.isTrue + ";");
+                                                        PLXC.out.println("goto " + labels.isFalse + ";");
+                                                        RESULT = labels;
+                                                    :}
+            | expression:e1 GREATER expression:e2   {:
+                                                        BoolLabelPair labels = new BoolLabelPair();
+                                                        BoolLabelPair tempLabels = new BoolLabelPair();
+                                                        PLXC.out.println("if (" + e2 + "<" + e1 + ") goto " + tempLabels.isTrue + ";");
+                                                        PLXC.out.println("goto " + labels.isFalse + ";");
+                                                        PLXC.out.println(tempLabels.isTrue + ":");
+                                                        PLXC.out.println("if (" + e1 + "!=" + e2 + ") goto " + labels.isTrue + ";");
+                                                        PLXC.out.println("goto " + labels.isFalse + ";");
+                                                        RESULT = labels;
+                                                    :}
+            | expression:e1 LESS expression:e2      {:
+                                                        BoolLabelPair labels = new BoolLabelPair();
+                                                        PLXC.out.println("if (" + e1 + "<" + e2 + ") goto " + labels.isTrue + ";");
+                                                        PLXC.out.println("goto " + labels.isFalse + ";");
+                                                        RESULT = labels;
+                                                    :}
+            | expression:e1 GREATER_EQ expression:e2 {:
+                                                        BoolLabelPair labels = new BoolLabelPair();
+                                                        PLXC.out.println("if (" + e1 + "<" + e2 + ") goto " + labels.isFalse + ";");
+                                                        PLXC.out.println("goto " + labels.isTrue + ";");
+                                                        RESULT = labels;
+                                                     :}
+            | expression:e1 LESS_EQ expression:e2   {:
+                                                        BoolLabelPair labels = new BoolLabelPair();
+                                                        PLXC.out.println("if (" + e1 + "<" + e2 + ") goto " + labels.isTrue + ";");
+                                                        PLXC.out.println("if (" + e1 + "==" + e2 + ") goto " + labels.isTrue + ";");
+                                                        PLXC.out.println("goto " + labels.isFalse + ";");
+                                                        RESULT = labels;
+                                                    :} 
+            | condition:c1 AND  {: PLXC.out.println(c1.isTrue + ":"); :} 
+              condition:c2  {: 
+                                BoolLabelPair labels = new BoolLabelPair();
+                                PLXC.out.println(c2.isTrue + ":");
+                                PLXC.out.println("goto " + labels.isTrue + ";");
+                                PLXC.out.println(c1.isFalse + ":");
+                                PLXC.out.println(c2.isFalse + ":");
+                                PLXC.out.println("goto " + labels.isFalse + ";");
+                                RESULT = labels;
+                            :}
+            | condition:c1 OR  {: PLXC.out.println(c1.isFalse + ":"); :} 
+              condition:c2  {: 
+                                BoolLabelPair labels = new BoolLabelPair();
+                                PLXC.out.println(c1.isTrue + ":");
+                                PLXC.out.println(c2.isTrue + ":");
+                                PLXC.out.println("goto " + labels.isTrue + ";");
+                                PLXC.out.println(c2.isFalse + ":");
+                                PLXC.out.println("goto " + labels.isFalse + ";");
+                                RESULT = labels;
+                            :}
+            | condition:c1 BIMPLIES bimplies_temp:t {:
+                                                        PLXC.out.println(c1.isTrue + ":");
+                                                        PLXC.out.println(t + " = 1;");
+                                                        PLXC.out.println(c1.isFalse + ":");
+                                                    :}
+              condition:c2  {:
+                                BoolLabelPair labels = new BoolLabelPair();
+                                PLXC.out.println(c2.isTrue + ":");
+                                PLXC.out.println("if ( " + t + " == " + "1 ) goto " + labels.isTrue + ";");
+                                PLXC.out.println("goto " + labels.isFalse + ";");
+                                PLXC.out.println(c2.isFalse + ":");
+                                PLXC.out.println("if ( " + t + " == " + "1 ) goto " + labels.isFalse + ";");
+                                PLXC.out.println("goto " + labels.isTrue + ";");
+                                RESULT = labels;
+                            :} 
+            | NOT condition:c   {:
+                                    BoolLabelPair labels = new BoolLabelPair();
+                                    PLXC.out.println(c.isTrue + ":");
+                                    PLXC.out.println("goto " + labels.isFalse + ";");
+                                    PLXC.out.println(c.isFalse + ":");
+                                    PLXC.out.println("goto " + labels.isTrue + ";");
+                                    RESULT = labels;    
+                                :}  
+            | AP condition:c CP {: RESULT = c; :}
+            | EXISTS label_forall:l ID_BOOL:i   {:
+                                                    PLXC.out.println(i + " = 0;");
+                                                    PLXC.out.println(l + ":");
+                                                :} 
+              COMA condition:c  {:
+                                    BoolLabelPair labels = new BoolLabelPair(); 
+                                    PLXC.out.println(c.isTrue + ":");
+                                    PLXC.out.println("goto " + labels.isTrue + ";");
+                                    PLXC.out.println(c.isFalse + ":");
+                                    PLXC.out.println("if (" + i + " == 1) goto " + labels.isFalse + ";");
+                                    PLXC.out.println(i + " = 1;");
+                                    PLXC.out.println("goto " + l + ";");
+                                    RESULT = labels;                                    
+                                :}  
+            | EXISTS label_forall:l ID:x FROM ENTERO:i1 TO ENTERO:i2 forall_step:s  {:
+                                                                                        PLXC.out.println(x + " = " + i1 + ";");
+                                                                                        PLXC.out.println(l + ":");
+                                                                                    :} 
+              COMA condition:c  {:
+                                    BoolLabelPair labels = new BoolLabelPair(); 
+                                    PLXC.out.println(c.isTrue + ":");
+                                    PLXC.out.println("goto " + labels.isTrue + ";");
+                                    PLXC.out.println(c.isFalse + ":");
+                                    PLXC.out.println(x + " = " + x + " + " + s + ";");
+                                    PLXC.out.println("if (" + i2 + " < " + x + ") goto " + labels.isFalse + ";");
+                                    PLXC.out.println("goto " + l + ";");
+                                    
+                                    RESULT = labels;
+                                :} 
+            | AP BOOLEAN CP expression:e    {:
+                                                BoolLabelPair labels = new BoolLabelPair();                                             
+                                                if (((Instancia) e).getTipo() != Tint.getInstancia()){
+                                                    PLXC.errorYPara("Cast error");
+                                                }
+                                                PLXC.out.println("if ( " + e + " == 0 ) goto " + labels.isFalse + ";");                                                
+                                                PLXC.out.println("goto " + labels.isTrue + ";");
+                                                RESULT = labels;
+                                            :}
+            | ID_BOOL:i {:
+                            BoolLabelPair labels = new BoolLabelPair();
+                            PLXC.out.println("if ( 1 " + "== " + i + ") goto " + labels.isTrue + ";");
+                            PLXC.out.println("goto " + labels.isFalse + ";");
+                            RESULT = labels;
+                        :}
+            | TRUE  {:
+                        BoolLabelPair labels = new BoolLabelPair();
+                        PLXC.out.println("goto " + labels.isTrue + ";");
+                        RESULT = labels;
+                    :}
+            | FALSE {:
+                        BoolLabelPair labels = new BoolLabelPair();
+                        PLXC.out.println("goto " + labels.isFalse + ";");
+                        RESULT = labels;
+                    :}                   
+            ;
+
+bimplies_temp ::=   {: 
+                        Objeto newObj = new Instancia(TablaS.newObj(), Tint.getInstancia(), 0, false);
+                        RESULT = newObj; 
+                    :};
+label_forall ::= {: RESULT = TablaS.newEtiq("Forall"); :};
+
+forall_step ::= STEP ENTERO:i {: RESULT = i; :}
+              | {: RESULT = "1"; :}
+              ; 
+
+controlParam ::= condition:c {: RESULT = c; :}
+               | expression:e   {:  
+                                    if(!(e instanceof Instancia)){
+                                        PLXC.errorYPara("Object is not a variable or value.");
+                                        return null;
+                                    }
+                                    if(((Instancia) e).getTipo() != Tboolean.getInstancia()){
+                                        PLXC.errorYPara("Variable " + e + " is not boolean.");
+                                        return null;
+                                    }
+                                    BoolLabelPair labels = new BoolLabelPair();
+                                    PLXC.out.println("if ( 1 " + "== " + e + ") goto " + labels.isTrue + ";");
+                                    PLXC.out.println("goto " + labels.isFalse + ";");
+                                    RESULT = labels; 
+                                :}
+               ;
+
+// CONTROL - if
+ln_if ::= IF label_if:l AP controlParam:c CP    {: PLXC.out.println(c.isTrue + ":"); :}
+          line   {: 
+                    PLXC.out.println("goto " + l + ";");
+                    PLXC.out.println(c.isFalse + ":"); 
+                :} 
+          else_if   {: PLXC.out.println(l + ":"); :}
+          ;
+
+else_if ::= ELSEIF label_if:l AP controlParam:c CP    {: PLXC.out.println(c.isTrue + ":"); :}
+            line   {: 
+                            PLXC.out.println("goto " + l + ";");
+                            PLXC.out.println(c.isFalse + ":"); 
+                        :}  
+            else_if {: PLXC.out.println(l + ":"); :}
+          | ELSE line
+          |
+          ;
+
+label_if ::= {: RESULT = TablaS.newEtiq("Final"); :};
+
+// CONTROL - while
+ln_while ::= WHILE label_while:l   {: PLXC.out.println(l + ":"); :}
+             AP controlParam:c CP    {: PLXC.out.println(c.isTrue + ":"); :}   
+             line   {:
+                        PLXC.out.println("goto " + l + ";");
+                        PLXC.out.println(c.isFalse + ":");
+                    :}
+             ; 
+
+ln_do_while ::= DO label_while:l {: PLXC.out.println(l + ":"); :} 
+                line WHILE AP controlParam:c CP {: 
+                                                    PLXC.out.println(c.isTrue + ":"); 
+                                                    PLXC.out.println("goto " + l + ";"); 
+                                                    PLXC.out.println(c.isFalse + ":"); 
+                                                :}
+                ;
+
+label_while ::= {: RESULT = TablaS.newEtiq("Loop"); :};
+
+// CONTROL - for
+ln_for ::= FOR label_for:l AP for_expression PCOMA    {: PLXC.out.println(l.loop + ":"); :}
+           controlParam:c PCOMA  {: PLXC.out.println(l.next + ":"); :} 
+           for_expression CP    {: 
+                                    PLXC.out.println("goto " + l.loop + ";"); 
+                                    PLXC.out.println(c.isTrue + ":"); 
+                                :} 
+           line {:
+                    PLXC.out.println("goto " + l.next + ";"); 
+                    PLXC.out.println(c.isFalse + ":"); 
+                :}
+          ;
+
+for_expression ::= expression
+                 |
+                 ;
+
+label_for ::= {: RESULT = new ForLabelPair(); :};
