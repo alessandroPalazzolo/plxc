@@ -3,8 +3,8 @@
 PLXC is a compiler written in Java, [JFlex](https://jflex.de/) and [CUP](https://github.com/ultimate-pa/javacup). It translates programs written in **PLX**, a small statically typed, C-like language, into **CTD**, a low-level *three-address code* (TAC) for an abstract machine with unlimited registers.
 
 ```
-prog.plx  ──►  PLXC  ──►  prog.ctd  ──►  ctd (interpreter)  ──►  output
- (source)     (compiler)  (TAC)
+prog.plx  ──►  PLXC  ──►  prog.ctd  ──►  tac  ──►  output
+(source)      (compiler)  (TAC)         (interpreter)
 ```
 
 Each CTD instruction has at most one operator and three operands (`x = a + b;`). The compiler is a single pass: the CUP grammar emits CTD while parsing, using a symbol table for scoping and type checking.
