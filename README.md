@@ -1,13 +1,13 @@
 # PLXC: a PLX to three-address code compiler
 
-PLXC is a compiler written in Java, [JFlex](https://jflex.de/) and [CUP](https://github.com/ultimate-pa/javacup). It translates programs written in **PLX**, a small statically typed, C-like language, into **CTD**, a low-level *three-address code* (TAC) for an abstract machine with unlimited registers.
+PLXC is a compiler written in Java, [JFlex](https://jflex.de/) and [CUP](https://github.com/ultimate-pa/javacup). It translates programs written in **PLX**, a small statically typed, C-like language, into **TAC**, a low-level *three-address code* (TAC) for an abstract machine with unlimited registers.
 
 ```
-prog.plx  ──►  PLXC  ──►  prog.ctd  ──►  tac  ──►  output
+prog.plx  ──►  PLXC  ──►  prog.tac  ──►  tac  ──►  output
 (source)      (compiler)  (TAC)         (interpreter)
 ```
 
-Each CTD instruction has at most one operator and three operands (`x = a + b;`). The compiler is a single pass: the CUP grammar emits CTD while parsing, using a symbol table for scoping and type checking.
+Each TAC instruction has at most one operator and three operands (`x = a + b;`). The compiler is a single pass: the CUP grammar emits TAC while parsing, using a symbol table for scoping and type checking.
 
 ## The PLX language
 
@@ -28,7 +28,7 @@ Each CTD instruction has at most one operator and three operands (`x = a + b;`).
 ### Expressions
 - Arithmetic: `+ - * /` and unary minus, with the usual Java precedence. All binary operators are left-associative.
 - Assignment is an expression with the lowest precedence and is right-associative, so `x = y = 3` works and assigns both.
-- Integers and floats can be mixed. Implicit conversions are inserted where needed, and the compiler emits the integer or real CTD operation (`*` or `*r`) that matches the expression type.
+- Integers and floats can be mixed. Implicit conversions are inserted where needed, and the compiler emits the integer or real TAC operation (`*` or `*r`) that matches the expression type.
 - Assigning a float to an `int` variable is a type error.
 - `char` values can be added to and subtracted from integers (`'A' + 1`, `10 + ch - 'a'`).
 
